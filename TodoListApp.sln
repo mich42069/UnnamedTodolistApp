@@ -1,0 +1,24 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TodoListApp", "TodoListApp\TodoListApp.csproj", "{200E1319-7D3F-4D2F-AE03-5825A123D17B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TodoListBackend", "TodoListBackend\TodoListBackend.csproj", "{308516DE-65F8-4159-A5AA-B9766655710B}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{200E1319-7D3F-4D2F-AE03-5825A123D17B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{200E1319-7D3F-4D2F-AE03-5825A123D17B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{200E1319-7D3F-4D2F-AE03-5825A123D17B}.Debug|Any CPU.Deploy.0 = Debug|Any CPU
+		{200E1319-7D3F-4D2F-AE03-5825A123D17B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{200E1319-7D3F-4D2F-AE03-5825A123D17B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{200E1319-7D3F-4D2F-AE03-5825A123D17B}.Release|Any CPU.Deploy.0 = Release|Any CPU
+		{308516DE-65F8-4159-A5AA-B9766655710B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{308516DE-65F8-4159-A5AA-B9766655710B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{308516DE-65F8-4159-A5AA-B9766655710B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{308516DE-65F8-4159-A5AA-B9766655710B}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
