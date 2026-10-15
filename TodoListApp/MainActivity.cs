@@ -1,5 +1,6 @@
 using Android.Content;
 using Android.Graphics;
+using Android.Graphics.Drawables;
 using Android.Views;
 using Backend = TodoListBackend.TodoListBackend;
 using TodoActivity = TodoListBackend.Activity;
@@ -12,6 +13,19 @@ public class MainActivity : Activity
     private ListView _list = null!;
     private List<TodoActivity> _shown = [];
     private Backend _backend = null!;
+    
+    private static readonly Color FarColor = Color.LightPink;
+    private static readonly Color NearColor = Color.DarkRed;
+    private static readonly TimeSpan ColorSpan = TimeSpan.FromDays(30);
+
+    private static Color DeadlineColor(DateTime deadline, Color far, Color near, TimeSpan span)
+    {
+        var t = Math.Clamp(1 - (deadline - DateTime.Now) / span, 0, 1);
+        return Color.Rgb(
+            (int)(far.R + (near.R - far.R) * t),
+            (int)(far.G + (near.G - far.G) * t),
+            (int)(far.B + (near.B - far.B) * t));
+    }
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
@@ -151,7 +165,8 @@ public class MainActivity : Activity
 
             var deadline = view.FindViewById<TextView>(Resource.Id.deadline)!;
             deadline.Text = a.Deadline.ToString("g");
-            deadline.SetTextColor(Color.ParseColor(a.Deadline < DateTime.Now ? "#CF6679" : "#03DAC5"));
+            deadline.SetTextColor(Color.White);
+            ((GradientDrawable)view.Background!.Mutate()!).SetColor(DeadlineColor(a.Deadline, FarColor, NearColor, ColorSpan));
 
             var description = view.FindViewById<TextView>(Resource.Id.description)!;
             description.Text = a.Description;
