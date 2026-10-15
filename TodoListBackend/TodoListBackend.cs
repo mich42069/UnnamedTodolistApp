@@ -55,4 +55,25 @@ public class TodoListBackend : ITodoListBackend
             return false;
         }
     }
+    public bool Export(Stream stream)
+    {
+        try
+        {
+            JsonSerializer.Serialize(stream, _activities.Values, Options);
+            return true;
+        }
+        catch (Exception e) when (e is IOException or NotSupportedException) { return false; }
+    }
+
+    public bool Import(Stream stream)
+    {
+        try
+        {
+            var loaded = JsonSerializer.Deserialize<List<Activity>>(stream, Options);
+            if (loaded is null) return false;
+            foreach (var activity in loaded) _activities.TryAdd(activity.Id, activity);
+            return true;
+        }
+        catch (Exception e) when (e is IOException or JsonException) { return false; }
+    }
 }

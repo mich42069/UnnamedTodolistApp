@@ -9,4 +9,6 @@ public interface ITodoListBackend
     public IEnumerable<Guid> GetActivityIds();
     public bool Save();
     public bool Load();
+    public bool Export(Stream stream);
+    public bool Import(Stream stream);
 }

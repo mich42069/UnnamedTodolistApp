@@ -5,10 +5,10 @@ using Backend = TodoListBackend.TodoListBackend;
 using TodoActivity = TodoListBackend.Activity;
 
 namespace TodoListApp;
-
-[Activity(Label = "@string/app_name", MainLauncher = true, Theme = "@android:style/Theme.DeviceDefault")]
+[Activity(Label = "@string/app_name", MainLauncher = true, Theme = "@android:style/Theme.DeviceDefault.NoActionBar")]
 public class MainActivity : Activity
 {
+    private const int ExportCode = 1, ImportCode = 2;
     private ListView _list = null!;
     private List<TodoActivity> _shown = [];
     private Backend _backend = null!;
@@ -22,6 +22,7 @@ public class MainActivity : Activity
         _backend.Load();
         _list = FindViewById<ListView>(Resource.Id.activityList)!;
         FindViewById<Button>(Resource.Id.addButton)!.Click += (_, _) => ShowCreateDialog();
+        FindViewById<Button>(Resource.Id.backupButton)!.Click += (_, _) => ShowBackupDialog();
         _list.ItemLongClick += (_, e) => ShowDeleteDialog(_shown[e.Position]);
         Refresh();
     }
@@ -44,9 +45,19 @@ public class MainActivity : Activity
 
         var layout = new LinearLayout(this) { Orientation = Orientation.Vertical };
         layout.SetPadding(48, 24, 48, 0);
-        var name = new EditText(this) { Hint = "Name" };
-        var description = new EditText(this) { Hint = "Description (optional)" };
-        var deadlineButton = new Button(this) { Text = deadline.ToString("g") };
+        var name = new EditText(this)
+        {
+            Hint = "Name"
+        };
+        var description = new EditText(this)
+        {
+            Hint = "Description"
+        };
+        var deadlineButton = new Button(this)
+        {
+            Text = deadline.ToString("g")
+        };
+        
         layout.AddView(name);
         layout.AddView(description);
         layout.AddView(deadlineButton);
@@ -85,6 +96,43 @@ public class MainActivity : Activity
             })!
             .SetNegativeButton("Cancel", (_, _) => { })!
             .Show();
+    }
+    private void ShowBackupDialog()
+    {
+        new AlertDialog.Builder(this)!
+            .SetItems(["Export to file", "Import from file"], (_, e) =>
+            {
+                if (e.Which == 0)
+                    StartActivityForResult(new Intent(Intent.ActionCreateDocument)
+                        .AddCategory(Intent.CategoryOpenable)!
+                        .SetType("application/json")!
+                        .PutExtra(Intent.ExtraTitle, "activities.json")!, ExportCode);
+                else
+                    StartActivityForResult(new Intent(Intent.ActionOpenDocument)
+                        .AddCategory(Intent.CategoryOpenable)!
+                        .SetType("*/*")!, ImportCode);
+            })!
+            .Show();
+    }
+
+    protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)
+    {
+        base.OnActivityResult(requestCode, resultCode, data);
+        if (resultCode != Result.Ok || data?.Data is not { } uri) return;
+
+        bool ok;
+        if (requestCode == ExportCode)
+        {
+            using var stream = ContentResolver!.OpenOutputStream(uri, "wt")!;
+            ok = _backend.Export(stream);
+        }
+        else
+        {
+            using var stream = ContentResolver!.OpenInputStream(uri)!;
+            ok = _backend.Import(stream);
+            Refresh();
+        }
+        Toast.MakeText(this, ok ? "Done" : "Failed", ToastLength.Short)!.Show();
     }
     
     private class ActivityAdapter(Context context, List<TodoActivity> items) : BaseAdapter
