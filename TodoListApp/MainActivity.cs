@@ -3,6 +3,7 @@ using Android.Graphics;
 using Android.Graphics.Drawables;
 using Android.Provider;
 using Android.Views;
+using IBackend = TodoListBackend.ITodoListBackend;
 using Backend = TodoListBackend.TodoListBackend;
 using TodoActivity = TodoListBackend.Activity;
 
@@ -13,7 +14,7 @@ public class MainActivity : Activity
     private const int ExportCode = 1, ImportCode = 2;
     private ListView _list = null!;
     private List<TodoActivity> _shown = [];
-    private Backend _backend = null!;
+    private IBackend _backend = null!;
     
     private static readonly Color FarColor = Color.ForestGreen;
     private static readonly Color NearColor = Color.DarkRed;
@@ -50,7 +51,7 @@ public class MainActivity : Activity
     
     private void Refresh()
     {
-        _shown = _backend.GetActivities().OrderBy(a => a.Deadline).ToList();
+        _shown = _backend.GetActivityHandler().GetActivities().OrderBy(a => a.Deadline).ToList();
         _list.Adapter = new ActivityAdapter(this, _shown);
     }
 
@@ -93,7 +94,7 @@ public class MainActivity : Activity
             {
                 if (string.IsNullOrWhiteSpace(name.Text)) return;
                 var desc = string.IsNullOrWhiteSpace(description.Text) ? "no-description" : description.Text;
-                _backend.CreateActivity(new TodoActivity(name.Text, deadline, desc));
+                _backend.GetActivityHandler().CreateActivity(new TodoActivity(name.Text, deadline, new("notype"), desc));
                 Refresh();
             })!
             .SetNegativeButton("Cancel", (_, _) => { })!
@@ -106,7 +107,7 @@ public class MainActivity : Activity
             .SetTitle($"Delete \"{activity.Name}\"?")!
             .SetPositiveButton("Delete", (_, _) =>
             {
-                _backend.DeleteActivity(activity.Id);
+                _backend.GetActivityHandler().DeleteActivity(activity.Id);
                 Refresh();
             })!
             .SetNegativeButton("Cancel", (_, _) => { })!
