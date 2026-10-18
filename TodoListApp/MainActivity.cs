@@ -1,6 +1,7 @@
 using Android.Content;
 using Android.Graphics;
 using Android.Graphics.Drawables;
+using Android.Provider;
 using Android.Views;
 using Backend = TodoListBackend.TodoListBackend;
 using TodoActivity = TodoListBackend.Activity;
@@ -14,9 +15,9 @@ public class MainActivity : Activity
     private List<TodoActivity> _shown = [];
     private Backend _backend = null!;
     
-    private static readonly Color FarColor = Color.LightPink;
+    private static readonly Color FarColor = Color.ForestGreen;
     private static readonly Color NearColor = Color.DarkRed;
-    private static readonly TimeSpan ColorSpan = TimeSpan.FromDays(30);
+    private static readonly TimeSpan ColorSpan = TimeSpan.FromDays(14);
 
     private static Color DeadlineColor(DateTime deadline, Color far, Color near, TimeSpan span)
     {
@@ -111,16 +112,16 @@ public class MainActivity : Activity
             .SetNegativeButton("Cancel", (_, _) => { })!
             .Show();
     }
+
     private void ShowBackupDialog()
     {
         new AlertDialog.Builder(this)!
             .SetItems(["Export to file", "Import from file"], (_, e) =>
             {
                 if (e.Which == 0)
-                    StartActivityForResult(new Intent(Intent.ActionCreateDocument)
-                        .AddCategory(Intent.CategoryOpenable)!
-                        .SetType("application/json")!
-                        .PutExtra(Intent.ExtraTitle, "activities.json")!, ExportCode);
+                    StartActivityForResult(new Intent(Intent.ActionOpenDocumentTree)
+                            .AddFlags(ActivityFlags.GrantReadUriPermission | ActivityFlags.GrantWriteUriPermission)!,
+                        ExportCode);
                 else
                     StartActivityForResult(new Intent(Intent.ActionOpenDocument)
                         .AddCategory(Intent.CategoryOpenable)!
@@ -136,10 +137,7 @@ public class MainActivity : Activity
 
         bool ok;
         if (requestCode == ExportCode)
-        {
-            using var stream = ContentResolver!.OpenOutputStream(uri, "wt")!;
-            ok = _backend.Export(stream);
-        }
+            ok = ExportToFolder(uri);
         else
         {
             using var stream = ContentResolver!.OpenInputStream(uri)!;
@@ -147,6 +145,35 @@ public class MainActivity : Activity
             Refresh();
         }
         Toast.MakeText(this, ok ? "Done" : "Failed", ToastLength.Short)!.Show();
+    }
+    private bool ExportToFolder(Android.Net.Uri treeUri)
+    {
+        var old = FindChild(treeUri, "activities_old.json");
+        if (old is not null) DocumentsContract.DeleteDocument(ContentResolver!, old);
+
+        var current = FindChild(treeUri, "activities.json");
+        if (current is not null) DocumentsContract.RenameDocument(ContentResolver!, current, "activities_old.json");
+
+        var dir = DocumentsContract.BuildDocumentUriUsingTree(treeUri, DocumentsContract.GetTreeDocumentId(treeUri));
+        var file = DocumentsContract.CreateDocument(ContentResolver!, dir!, "application/json", "activities.json");
+        if (file is null) return false;
+
+        using var stream = ContentResolver!.OpenOutputStream(file, "wt")!;
+        return _backend.Export(stream);
+    }
+
+    private Android.Net.Uri? FindChild(Android.Net.Uri treeUri, string name)
+    {
+        var children = DocumentsContract.BuildChildDocumentsUriUsingTree(
+            treeUri, DocumentsContract.GetTreeDocumentId(treeUri));
+        using var cursor = ContentResolver!.Query(children!,
+            [DocumentsContract.Document.ColumnDocumentId, DocumentsContract.Document.ColumnDisplayName],
+            null, null, null);
+
+        while (cursor is not null && cursor.MoveToNext())
+            if (cursor.GetString(1) == name)
+                return DocumentsContract.BuildDocumentUriUsingTree(treeUri, cursor.GetString(0));
+        return null;
     }
     
     private class ActivityAdapter(Context context, List<TodoActivity> items) : BaseAdapter
