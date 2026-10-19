@@ -5,25 +5,23 @@
               android:orientation="vertical"
               android:background="#121212"
               android:fitsSystemWindows="true"
-              android:padding="16dp">
+              android:padding="0dp">
 
     <Button
             android:id="@+id/addButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
+            android:layout_marginBottom="4dp"
             android:background="@drawable/button"
             android:text="New activity"
             android:textAllCaps="false"
-            android:textColor="#000000" />
+            android:textColor="#FFFFFF" />
 
-    <ListView
+    <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/activityList"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1"
-            android:divider="@android:color/transparent"
-            android:dividerHeight="12dp" />
+            android:layout_weight="1" />
     
     <Button
             android:id="@+id/backupButton"
@@ -33,5 +31,5 @@
             android:background="@drawable/button"
             android:text="Backup"
             android:textAllCaps="false"
-            android:textColor="#000000" />
+            android:textColor="#FFFFFF" />
 </LinearLayout>

@@ -3,6 +3,7 @@ using Android.Graphics;
 using Android.Graphics.Drawables;
 using Android.Provider;
 using Android.Views;
+using AndroidX.RecyclerView.Widget;
 using IBackend = TodoListBackend.ITodoListBackend;
 using Backend = TodoListBackend.TodoListBackend;
 using TodoActivity = TodoListBackend.Activity;
@@ -13,9 +14,11 @@ namespace TodoListApp;
 public class MainActivity : Activity
 {
     private const int ExportCode = 1, ImportCode = 2;
-    private ListView _list = null!;
-    private List<TodoActivity> _shown = [];
+    private RecyclerView _list = null!;
+    private ActivityAdapter _adapter = null!;
+    private readonly List<TodoActivity> _shown = [];
     private IBackend _backend = null!;
+    private DateTime? _lastDeadline;
     
     private static readonly Color FarColor = Color.ForestGreen;
     private static readonly Color NearColor = Color.DarkRed;
@@ -37,10 +40,27 @@ public class MainActivity : Activity
 
         _backend = new Backend(System.IO.Path.Combine(FilesDir!.AbsolutePath, "activities.json"));
         _backend.Load();
-        _list = FindViewById<ListView>(Resource.Id.activityList)!;
-        FindViewById<Button>(Resource.Id.addButton)!.Click += (_, _) => ShowCreateDialog();
+
+        _list = FindViewById<RecyclerView>(Resource.Id.activityList)!;
+        _adapter = new ActivityAdapter(this, _shown);
+        _list.SetLayoutManager(new LinearLayoutManager(this));
+        _list.SetAdapter(_adapter);
+        new ItemTouchHelper(new SwipeCallback(
+            position =>
+            {
+                var activity = _shown[position];
+                Refresh();
+                ShowDeleteDialog(activity);
+            },
+            position =>
+            {
+                var activity = _shown[position];
+                Refresh();
+                ShowActivityDialog(activity);
+            })).AttachToRecyclerView(_list);
+
+        FindViewById<Button>(Resource.Id.addButton)!.Click += (_, _) => ShowActivityDialog();
         FindViewById<Button>(Resource.Id.backupButton)!.Click += (_, _) => ShowBackupDialog();
-        _list.ItemLongClick += (_, e) => ShowDeleteDialog(_shown[e.Position]);
         Refresh();
     }
 
@@ -52,14 +72,15 @@ public class MainActivity : Activity
     
     private void Refresh()
     {
-        _shown = _backend.GetActivityHandler().GetActivities().OrderBy(a => a.Deadline).ToList();
-        _list.Adapter = new ActivityAdapter(this, _shown);
+        _shown.Clear();
+        _shown.AddRange(_backend.GetActivityHandler().GetActivities().OrderBy(a => a.Deadline));
+        _adapter.NotifyDataSetChanged();
     }
 
-    private void ShowCreateDialog()
+    private void ShowActivityDialog(TodoActivity? existing = null)
     {
-        var deadline = DateTime.Now.AddDays(1);
-        TodoActivityType? selectedType = null;
+        var deadline = existing?.Deadline ?? _lastDeadline ?? DateTime.Now.AddDays(1);
+        TodoActivityType? selectedType = existing?.Type;
 
         var layout = new LinearLayout(this) { Orientation = Orientation.Vertical };
         layout.SetPadding(48, 24, 48, 0);
@@ -73,12 +94,18 @@ public class MainActivity : Activity
         };
         var typeButton = new Button(this)
         {
-            Text = "Choose type"
+            Text = selectedType?.Name ?? "Choose type"
         };
         var deadlineButton = new Button(this)
         {
             Text = deadline.ToString("g")
         };
+
+        if (existing is { } e)
+        {
+            name.Text = e.Name;
+            if (e.Description is not (null or "no-description")) description.Text = e.Description;
+        }
         
         layout.AddView(name);
         layout.AddView(description);
@@ -101,9 +128,9 @@ public class MainActivity : Activity
                 deadline.Year, deadline.Month - 1, deadline.Day).Show();
 
         new AlertDialog.Builder(this)!
-            .SetTitle("New activity")!
+            .SetTitle(existing is null ? "New activity" : "Edit activity")!
             .SetView(layout)!
-            .SetPositiveButton("Create", (_, _) =>
+            .SetPositiveButton(existing is null ? "Create" : "Save", (_, _) =>
             {
                 if (string.IsNullOrWhiteSpace(name.Text) || selectedType is null
                     || !_backend.GetActivityTypeHandler().GetActivityTypes().Any(t => t.Id == selectedType.Value.Id))
@@ -112,7 +139,22 @@ public class MainActivity : Activity
                     return;
                 }
                 var desc = string.IsNullOrWhiteSpace(description.Text) ? "no-description" : description.Text;
-                _backend.GetActivityHandler().CreateActivity(new TodoActivity(name.Text, deadline, selectedType.Value, desc));
+                var handler = _backend.GetActivityHandler();
+
+                if (existing is { } old)
+                {
+                    var edited = old;
+                    edited.Name = name.Text;
+                    edited.Type = selectedType.Value;
+                    edited.Description = desc;
+                    edited.Deadline = deadline;
+                    handler.DeleteActivity(old.Id);
+                    handler.TryAddActivity(old.Id, edited);
+                }else
+                {
+                    handler.CreateActivity(new TodoActivity(name.Text, deadline, selectedType.Value, desc));
+                    _lastDeadline = deadline;
+                }
                 Refresh();
             })!
             .SetNegativeButton("Cancel", (_, _) => { })!
@@ -252,17 +294,46 @@ public class MainActivity : Activity
                 return DocumentsContract.BuildDocumentUriUsingTree(treeUri, cursor.GetString(0));
         return null;
     }
-    
-    private class ActivityAdapter(Context context, List<TodoActivity> items) : BaseAdapter
-    {
-        public override int Count => items.Count;
-        public override Java.Lang.Object? GetItem(int position) => null;
-        public override long GetItemId(int position) => position;
 
-        public override View GetView(int position, View? convertView, ViewGroup? parent)
+    private class SwipeCallback(Action<int> onSwipeLeft, Action<int> onSwipeRight)
+        : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.Left | ItemTouchHelper.Right)
+    {
+        public override bool OnMove(RecyclerView recyclerView, RecyclerView.ViewHolder viewHolder,
+            RecyclerView.ViewHolder target) => false;
+
+        public override void OnSwiped(RecyclerView.ViewHolder viewHolder, int direction)
         {
-            var view = convertView
-                       ?? LayoutInflater.From(context)!.Inflate(Resource.Layout.item_activity, parent, false)!;
+            var position = viewHolder.BindingAdapterPosition;
+            if (position < 0) return;
+            if (direction == ItemTouchHelper.Left) onSwipeLeft(position);
+            else onSwipeRight(position);
+        }
+
+        public override void OnChildDraw(Canvas c, RecyclerView recyclerView, RecyclerView.ViewHolder viewHolder,
+            float dX, float dY, int actionState, bool isCurrentlyActive)
+        {
+            var item = viewHolder.ItemView;
+            if (dX != 0)
+            {
+                var background = new ColorDrawable(dX < 0 ? Color.DarkRed : Color.SteelBlue);
+                if (dX < 0) background.SetBounds(item.Right + (int)dX, item.Top, item.Right, item.Bottom);
+                else background.SetBounds(item.Left, item.Top, item.Left + (int)dX, item.Bottom);
+                background.Draw(c);
+            }
+            base.OnChildDraw(c, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive);
+        }
+    }
+    
+    private class ActivityAdapter(Context context, List<TodoActivity> items) : RecyclerView.Adapter
+    {
+        public override int ItemCount => items.Count;
+
+        public override RecyclerView.ViewHolder OnCreateViewHolder(ViewGroup parent, int viewType) =>
+            new Holder(LayoutInflater.From(context)!.Inflate(Resource.Layout.item_activity, parent, false)!);
+
+        public override void OnBindViewHolder(RecyclerView.ViewHolder holder, int position)
+        {
+            var view = holder.ItemView;
             var a = items[position];
 
             view.FindViewById<TextView>(Resource.Id.name)!.Text = a.Name;
@@ -276,8 +347,8 @@ public class MainActivity : Activity
             var description = view.FindViewById<TextView>(Resource.Id.description)!;
             description.Text = a.Description;
             description.Visibility = a.Description is null or "no-description" ? ViewStates.Gone : ViewStates.Visible;
-
-            return view;
         }
+
+        private class Holder(View view) : RecyclerView.ViewHolder(view) { }
     }
 }
