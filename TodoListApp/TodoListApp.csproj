@@ -17,4 +17,7 @@
     <ItemGroup>
       <ProjectReference Include="..\TodoListBackend\TodoListBackend.csproj" />
     </ItemGroup>
+    <ItemGroup>
+      <PackageReference Include="Xamarin.AndroidX.RecyclerView" Version="1.4.0.6" />
+    </ItemGroup>
 </Project>

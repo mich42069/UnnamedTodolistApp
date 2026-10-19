@@ -26,56 +26,5 @@ public class ActivityHandler : IActivityHandler
 
     public IEnumerable<Guid> GetActivityIds() => _activities.Keys;
     
-    
-    public bool Save(string filepath, JsonSerializerOptions options)
-    {
-        try
-        {
-            File.WriteAllText(filepath, JsonSerializer.Serialize(_activities.Values, options));
-            return true;
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            return false;
-        }
-    }
-
-    public bool Load(string filepath, JsonSerializerOptions options)
-    {
-        if (!File.Exists(filepath)) return false;
-        try
-        {
-            var loaded = JsonSerializer.Deserialize<List<Activity>>(File.ReadAllText(filepath), options);
-            if (loaded is null) return false;
-
-            _activities.Clear();
-            foreach (var activity in loaded) _activities.TryAdd(activity.Id, activity);
-            return true;
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException)
-        {
-            return false;
-        }
-    }
-    public bool Export(Stream stream, JsonSerializerOptions options)
-    {
-        try
-        {
-            JsonSerializer.Serialize(stream, _activities.Values, options);
-            return true;
-        }
-        catch (Exception e) when (e is IOException or NotSupportedException) { return false; }
-    }
-
-    public bool Import(Stream stream, JsonSerializerOptions options)
-    {
-        try
-        {
-            var loaded = JsonSerializer.Deserialize<List<Activity>>(stream, options);
-            if (loaded is null) return false;
-            foreach (var activity in loaded) _activities.TryAdd(activity.Id, activity);
-            return true;
-        }
-        catch (Exception e) when (e is IOException or JsonException) { return false; }
-    }
+    public void Clear() => _activities.Clear();
 }

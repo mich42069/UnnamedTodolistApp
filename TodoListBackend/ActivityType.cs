@@ -1,7 +1,6 @@
 ﻿namespace TodoListBackend;
 
-public readonly record struct ActivityType(string type)
+public readonly record struct ActivityType(Guid Id, string Name)
 {
-    public Guid Guid { get; } = Guid.NewGuid();
-    public string Type => type;
+    public ActivityType(string name) : this(Guid.NewGuid(), name) { }
 }

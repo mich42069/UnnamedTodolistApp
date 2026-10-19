@@ -2,7 +2,7 @@
 
 public class ActivityTypeHandler : IActivityTypeHandler
 {
-    private List<ActivityType> _activityTypes;
+    private List<ActivityType> _activityTypes = new();
     public IEnumerable<ActivityType> GetActivityTypes()
     {
         return _activityTypes;
@@ -21,11 +21,20 @@ public class ActivityTypeHandler : IActivityTypeHandler
     {
         foreach (var type in _activityTypes)
         {
-            if (type.Guid == activityTypeId)
+            if (type.Id == activityTypeId)
             {
                 return _activityTypes.Remove(type);
             }
         }
         return false;
+    }
+    
+    public void Clear() => _activityTypes.Clear();
+
+    public bool TryAdd(ActivityType type)
+    {
+        if (_activityTypes.Any(t => t.Id == type.Id)) return false;
+        _activityTypes.Add(type);
+        return true;
     }
 }

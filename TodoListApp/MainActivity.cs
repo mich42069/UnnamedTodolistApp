@@ -6,6 +6,7 @@ using Android.Views;
 using IBackend = TodoListBackend.ITodoListBackend;
 using Backend = TodoListBackend.TodoListBackend;
 using TodoActivity = TodoListBackend.Activity;
+using TodoActivityType = TodoListBackend.ActivityType;
 
 namespace TodoListApp;
 [Activity(Label = "@string/app_name", MainLauncher = true, Theme = "@android:style/Theme.DeviceDefault.NoActionBar")]
@@ -58,6 +59,7 @@ public class MainActivity : Activity
     private void ShowCreateDialog()
     {
         var deadline = DateTime.Now.AddDays(1);
+        TodoActivityType? selectedType = null;
 
         var layout = new LinearLayout(this) { Orientation = Orientation.Vertical };
         layout.SetPadding(48, 24, 48, 0);
@@ -69,6 +71,10 @@ public class MainActivity : Activity
         {
             Hint = "Description"
         };
+        var typeButton = new Button(this)
+        {
+            Text = "Choose type"
+        };
         var deadlineButton = new Button(this)
         {
             Text = deadline.ToString("g")
@@ -76,7 +82,14 @@ public class MainActivity : Activity
         
         layout.AddView(name);
         layout.AddView(description);
+        layout.AddView(typeButton);
         layout.AddView(deadlineButton);
+
+        typeButton.Click += (_, _) => ShowTypePicker(t =>
+        {
+            selectedType = t;
+            typeButton.Text = t.Name;
+        });
 
         deadlineButton.Click += (_, _) =>
             new DatePickerDialog(this, (_, d) =>
@@ -92,12 +105,75 @@ public class MainActivity : Activity
             .SetView(layout)!
             .SetPositiveButton("Create", (_, _) =>
             {
-                if (string.IsNullOrWhiteSpace(name.Text)) return;
+                if (string.IsNullOrWhiteSpace(name.Text) || selectedType is null
+                    || !_backend.GetActivityTypeHandler().GetActivityTypes().Any(t => t.Id == selectedType.Value.Id))
+                {
+                    Toast.MakeText(this, "Name and type are required", ToastLength.Short)!.Show();
+                    return;
+                }
                 var desc = string.IsNullOrWhiteSpace(description.Text) ? "no-description" : description.Text;
-                _backend.GetActivityHandler().CreateActivity(new TodoActivity(name.Text, deadline, new("notype"), desc));
+                _backend.GetActivityHandler().CreateActivity(new TodoActivity(name.Text, deadline, selectedType.Value, desc));
                 Refresh();
             })!
             .SetNegativeButton("Cancel", (_, _) => { })!
+            .Show();
+    }
+
+    private void ShowTypePicker(Action<TodoActivityType> onPicked)
+    {
+        var handler = _backend.GetActivityTypeHandler();
+        var types = handler.GetActivityTypes().ToList();
+        var items = types.Select(t => t.Name).Append("+ Add new type").ToArray();
+
+        var dialog = new AlertDialog.Builder(this)!
+            .SetTitle("Type")!
+            .SetItems(items, (_, e) =>
+            {
+                if (e.Which < types.Count) onPicked(types[e.Which]);
+                else ShowAddTypeDialog(onPicked);
+            })!
+            .Show()!;
+
+        dialog.ListView!.ItemLongClick += (_, e) =>
+        {
+            if (e.Position >= types.Count) return;
+            var type = types[e.Position];
+
+            if (_backend.GetActivityHandler().GetActivities().Any(a => a.Type.Id == type.Id))
+            {
+                Toast.MakeText(this, "Type is used by existing activities", ToastLength.Short)!.Show();
+                return;
+            }
+
+            new AlertDialog.Builder(this)!
+                .SetTitle($"Delete \"{type.Name}\"?")!
+                .SetPositiveButton("Delete", (_, _) =>
+                {
+                    handler.RemoveActivityType(type.Id);
+                    dialog.Dismiss();
+                    ShowTypePicker(onPicked);
+                })!
+                .SetNegativeButton("Cancel", (_, _) => { })!
+                .Show();
+        };
+    }
+
+    private void ShowAddTypeDialog(Action<TodoActivityType> onPicked)
+    {
+        var input = new EditText(this) { Hint = "Type name" };
+        new AlertDialog.Builder(this)!
+            .SetTitle("New type")!
+            .SetView(input)!
+            .SetPositiveButton("Add", (_, _) =>
+            {
+                if (string.IsNullOrWhiteSpace(input.Text)) return;
+                var handler = _backend.GetActivityTypeHandler();
+                if (handler.AddActivityType(input.Text))
+                    onPicked(handler.GetActivityTypes().First(t => t.Name == input.Text));
+                else
+                    ShowTypePicker(onPicked);
+            })!
+            .SetNegativeButton("Cancel", (_, _) => ShowTypePicker(onPicked))!
             .Show();
     }
 
@@ -190,6 +266,7 @@ public class MainActivity : Activity
             var a = items[position];
 
             view.FindViewById<TextView>(Resource.Id.name)!.Text = a.Name;
+            view.FindViewById<TextView>(Resource.Id.type)!.Text = a.Type.Name;
 
             var deadline = view.FindViewById<TextView>(Resource.Id.deadline)!;
             deadline.Text = a.Deadline.ToString("g");
