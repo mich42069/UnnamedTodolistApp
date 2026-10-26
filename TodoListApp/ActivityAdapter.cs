@@ -20,7 +20,12 @@ public class ActivityAdapter(Context context, List<TodoActivity> items, IDeadlin
 
         var deadline = view.FindViewById<TextView>(Resource.Id.deadline)!;
         deadline.Text = a.Deadline.ToString("g");
-        deadline.SetTextColor(Color.White);
+        var background = Colorizer.GetColor(a.Deadline);
+        ((GradientDrawable)view.Background!.Mutate()!).SetColor(background);
+
+        var text = ContrastColor.TextFor(background);
+        foreach (var id in new[] { Resource.Id.name, Resource.Id.type, Resource.Id.deadline, Resource.Id.description })
+            view.FindViewById<TextView>(id)!.SetTextColor(text);
         ((GradientDrawable)view.Background!.Mutate()!).SetColor(Colorizer.GetColor(a.Deadline));
         var description = view.FindViewById<TextView>(Resource.Id.description)!;
         description.Text = a.Description;

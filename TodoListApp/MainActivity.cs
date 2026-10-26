@@ -19,7 +19,7 @@ public class MainActivity : Activity
         _backend.Load();
 
         _dialogs = new ActivityDialogs(this, _backend, Refresh);
-        _backup = new BackupManager(this, _backend, Refresh);
+        _backup = new BackupManager(this, _backend, () => _colors, OnImported);
 
         _store = new SettingsStore(this);
         _colors = _store.Load();
@@ -42,6 +42,12 @@ public class MainActivity : Activity
 
         FindViewById<Button>(Resource.Id.addButton)!.Click += (_, _) => _dialogs.ShowActivity();
         FindViewById<Button>(Resource.Id.optionsButton)!.Click += (_, _) => options.Show();
+        Refresh();
+    }
+    
+    private void OnImported(DeadlineColorSettings? colors)
+    {
+        if (colors is not null) ApplyColors(colors);
         Refresh();
     }
 

@@ -1,6 +1,7 @@
 ﻿namespace TodoListApp;
 
-public class BackupManager(Android.App.Activity host, IBackend backend, Action onImported)
+public class BackupManager(Android.App.Activity host, IBackend backend,
+    Func<DeadlineColorSettings> getColors, Action<DeadlineColorSettings?> onImported)
 {
     private const int ExportCode = 1, ImportCode = 2;
 
@@ -32,8 +33,8 @@ public class BackupManager(Android.App.Activity host, IBackend backend, Action o
         else
         {
             using var stream = host.ContentResolver!.OpenInputStream(uri)!;
-            ok = backend.Import(stream);
-            onImported();
+            ok = BackupFormat.Import(backend, stream, out var colors);
+            onImported(colors);
         }
 
         Toast.MakeText(host, ok ? "Done" : "Failed", ToastLength.Short)!.Show();
@@ -52,7 +53,7 @@ public class BackupManager(Android.App.Activity host, IBackend backend, Action o
         if (file is null) return false;
 
         using var stream = host.ContentResolver!.OpenOutputStream(file, "wt")!;
-        return backend.Export(stream);
+        return BackupFormat.Export(backend, getColors(), stream);
     }
 
     private Android.Net.Uri? FindChild(Android.Net.Uri treeUri, string name)
