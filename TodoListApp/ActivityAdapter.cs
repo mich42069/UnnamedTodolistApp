@@ -3,7 +3,8 @@
 public class ActivityAdapter(Context context, List<TodoActivity> items, IDeadlineColorizer colorizer)
     : RecyclerView.Adapter
 {
-    
+    public IDeadlineColorizer Colorizer { get; set; } = colorizer;
+
     public override int ItemCount => items.Count;
 
     public override RecyclerView.ViewHolder OnCreateViewHolder(ViewGroup parent, int viewType) =>
@@ -20,11 +21,13 @@ public class ActivityAdapter(Context context, List<TodoActivity> items, IDeadlin
         var deadline = view.FindViewById<TextView>(Resource.Id.deadline)!;
         deadline.Text = a.Deadline.ToString("g");
         deadline.SetTextColor(Color.White);
-        ((GradientDrawable)view.Background!.Mutate()!).SetColor(colorizer.GetColor(a.Deadline));
+        ((GradientDrawable)view.Background!.Mutate()!).SetColor(Colorizer.GetColor(a.Deadline));
         var description = view.FindViewById<TextView>(Resource.Id.description)!;
         description.Text = a.Description;
         description.Visibility = a.Description is null or "no-description" ? ViewStates.Gone : ViewStates.Visible;
     }
-    private class Holder(View view) : RecyclerView.ViewHolder(view) { }
+
+    private class Holder(View view) : RecyclerView.ViewHolder(view)
+    {
+    }
 }
-// ...

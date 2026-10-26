@@ -8,7 +8,8 @@ public class MainActivity : Activity
     private ActivityAdapter _adapter = null!;
     private ActivityDialogs _dialogs = null!;
     private BackupManager _backup = null!;
-
+    private SettingsStore _store = null!;
+    private DeadlineColorSettings _colors = null!;
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
@@ -20,9 +21,16 @@ public class MainActivity : Activity
         _dialogs = new ActivityDialogs(this, _backend, Refresh);
         _backup = new BackupManager(this, _backend, Refresh);
 
-        var colorizer = new GradientDeadlineColorizer(
-            Color.ForestGreen, Color.DarkRed, TimeSpan.FromDays(14), new LinearCurve());
-        _adapter = new ActivityAdapter(this, _shown, colorizer);
+        _store = new SettingsStore(this);
+        _colors = _store.Load();
+        _adapter = new ActivityAdapter(this, _shown, _colors.ToColorizer());
+        
+        var options = new OptionsMenu(this,
+        [
+            ("Deadline colors", () => new ColorCurveDialog(this, _colors, ApplyColors).Show()),
+            ("Backup", () => _backup.ShowDialog())
+        ]);
+
 
         var list = FindViewById<RecyclerView>(Resource.Id.activityList)!;
         list.SetLayoutManager(new LinearLayoutManager(this));
@@ -33,10 +41,18 @@ public class MainActivity : Activity
         )).AttachToRecyclerView(list);
 
         FindViewById<Button>(Resource.Id.addButton)!.Click += (_, _) => _dialogs.ShowActivity();
-        FindViewById<Button>(Resource.Id.backupButton)!.Click += (_, _) => _backup.ShowDialog();
+        FindViewById<Button>(Resource.Id.optionsButton)!.Click += (_, _) => options.Show();
         Refresh();
     }
 
+    private void ApplyColors(DeadlineColorSettings settings)
+    {
+        _colors = settings;
+        _store.Save(settings);
+        _adapter.Colorizer = settings.ToColorizer();
+        _adapter.NotifyDataSetChanged();
+    }
+    
     protected override void OnPause()
     {
         base.OnPause();
