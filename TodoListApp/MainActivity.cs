@@ -1,37 +1,13 @@
-using Android.Content;
-using Android.Graphics;
-using Android.Graphics.Drawables;
-using Android.Provider;
-using Android.Views;
-using AndroidX.RecyclerView.Widget;
-using IBackend = TodoListBackend.ITodoListBackend;
-using Backend = TodoListBackend.TodoListBackend;
-using TodoActivity = TodoListBackend.Activity;
-using TodoActivityType = TodoListBackend.ActivityType;
-
 namespace TodoListApp;
+
 [Activity(Label = "@string/app_name", MainLauncher = true, Theme = "@android:style/Theme.DeviceDefault.NoActionBar")]
 public class MainActivity : Activity
 {
-    private const int ExportCode = 1, ImportCode = 2;
-    private RecyclerView _list = null!;
-    private ActivityAdapter _adapter = null!;
     private readonly List<TodoActivity> _shown = [];
     private IBackend _backend = null!;
-    private DateTime? _lastDeadline;
-    
-    private static readonly Color FarColor = Color.ForestGreen;
-    private static readonly Color NearColor = Color.DarkRed;
-    private static readonly TimeSpan ColorSpan = TimeSpan.FromDays(14);
-
-    private static Color DeadlineColor(DateTime deadline, Color far, Color near, TimeSpan span)
-    {
-        var t = Math.Clamp(1 - (deadline - DateTime.Now) / span, 0, 1);
-        return Color.Rgb(
-            (int)(far.R + (near.R - far.R) * t),
-            (int)(far.G + (near.G - far.G) * t),
-            (int)(far.B + (near.B - far.B) * t));
-    }
+    private ActivityAdapter _adapter = null!;
+    private ActivityDialogs _dialogs = null!;
+    private BackupManager _backup = null!;
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
@@ -41,26 +17,23 @@ public class MainActivity : Activity
         _backend = new Backend(System.IO.Path.Combine(FilesDir!.AbsolutePath, "activities.json"));
         _backend.Load();
 
-        _list = FindViewById<RecyclerView>(Resource.Id.activityList)!;
-        _adapter = new ActivityAdapter(this, _shown);
-        _list.SetLayoutManager(new LinearLayoutManager(this));
-        _list.SetAdapter(_adapter);
-        new ItemTouchHelper(new SwipeCallback(
-            position =>
-            {
-                var activity = _shown[position];
-                Refresh();
-                ShowDeleteDialog(activity);
-            },
-            position =>
-            {
-                var activity = _shown[position];
-                Refresh();
-                ShowActivityDialog(activity);
-            })).AttachToRecyclerView(_list);
+        _dialogs = new ActivityDialogs(this, _backend, Refresh);
+        _backup = new BackupManager(this, _backend, Refresh);
 
-        FindViewById<Button>(Resource.Id.addButton)!.Click += (_, _) => ShowActivityDialog();
-        FindViewById<Button>(Resource.Id.backupButton)!.Click += (_, _) => ShowBackupDialog();
+        var colorizer = new GradientDeadlineColorizer(
+            Color.ForestGreen, Color.DarkRed, TimeSpan.FromDays(14), new LinearCurve());
+        _adapter = new ActivityAdapter(this, _shown, colorizer);
+
+        var list = FindViewById<RecyclerView>(Resource.Id.activityList)!;
+        list.SetLayoutManager(new LinearLayoutManager(this));
+        list.SetAdapter(_adapter);
+        new ItemTouchHelper(new SwipeCallback(
+            position => { var a = _shown[position]; Refresh(); _dialogs.ShowDelete(a); },
+            position => { var a = _shown[position]; Refresh(); _dialogs.ShowActivity(a); }
+        )).AttachToRecyclerView(list);
+
+        FindViewById<Button>(Resource.Id.addButton)!.Click += (_, _) => _dialogs.ShowActivity();
+        FindViewById<Button>(Resource.Id.backupButton)!.Click += (_, _) => _backup.ShowDialog();
         Refresh();
     }
 
@@ -69,286 +42,17 @@ public class MainActivity : Activity
         base.OnPause();
         _backend.Save();
     }
-    
+
+    protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)
+    {
+        base.OnActivityResult(requestCode, resultCode, data);
+        _backup.HandleResult(requestCode, resultCode, data);
+    }
+
     private void Refresh()
     {
         _shown.Clear();
         _shown.AddRange(_backend.GetActivityHandler().GetActivities().OrderBy(a => a.Deadline));
         _adapter.NotifyDataSetChanged();
-    }
-
-    private void ShowActivityDialog(TodoActivity? existing = null)
-    {
-        var deadline = existing?.Deadline ?? _lastDeadline ?? DateTime.Now.AddDays(1);
-        TodoActivityType? selectedType = existing?.Type;
-
-        var layout = new LinearLayout(this) { Orientation = Orientation.Vertical };
-        layout.SetPadding(48, 24, 48, 0);
-        var name = new EditText(this)
-        {
-            Hint = "Name"
-        };
-        var description = new EditText(this)
-        {
-            Hint = "Description"
-        };
-        var typeButton = new Button(this)
-        {
-            Text = selectedType?.Name ?? "Choose type"
-        };
-        var deadlineButton = new Button(this)
-        {
-            Text = deadline.ToString("g")
-        };
-
-        if (existing is { } e)
-        {
-            name.Text = e.Name;
-            if (e.Description is not (null or "no-description")) description.Text = e.Description;
-        }
-        
-        layout.AddView(name);
-        layout.AddView(description);
-        layout.AddView(typeButton);
-        layout.AddView(deadlineButton);
-
-        typeButton.Click += (_, _) => ShowTypePicker(t =>
-        {
-            selectedType = t;
-            typeButton.Text = t.Name;
-        });
-
-        deadlineButton.Click += (_, _) =>
-            new DatePickerDialog(this, (_, d) =>
-                    new TimePickerDialog(this, (_, t) =>
-                    {
-                        deadline = d.Date.Add(new TimeSpan(t.HourOfDay, t.Minute, 0));
-                        deadlineButton.Text = deadline.ToString("g");
-                    }, deadline.Hour, deadline.Minute, true).Show(),
-                deadline.Year, deadline.Month - 1, deadline.Day).Show();
-
-        new AlertDialog.Builder(this)!
-            .SetTitle(existing is null ? "New activity" : "Edit activity")!
-            .SetView(layout)!
-            .SetPositiveButton(existing is null ? "Create" : "Save", (_, _) =>
-            {
-                if (string.IsNullOrWhiteSpace(name.Text) || selectedType is null
-                    || !_backend.GetActivityTypeHandler().GetActivityTypes().Any(t => t.Id == selectedType.Value.Id))
-                {
-                    Toast.MakeText(this, "Name and type are required", ToastLength.Short)!.Show();
-                    return;
-                }
-                var desc = string.IsNullOrWhiteSpace(description.Text) ? "no-description" : description.Text;
-                var handler = _backend.GetActivityHandler();
-
-                if (existing is { } old)
-                {
-                    var edited = old;
-                    edited.Name = name.Text;
-                    edited.Type = selectedType.Value;
-                    edited.Description = desc;
-                    edited.Deadline = deadline;
-                    handler.DeleteActivity(old.Id);
-                    handler.TryAddActivity(old.Id, edited);
-                }else
-                {
-                    handler.CreateActivity(new TodoActivity(name.Text, deadline, selectedType.Value, desc));
-                    _lastDeadline = deadline;
-                }
-                Refresh();
-            })!
-            .SetNegativeButton("Cancel", (_, _) => { })!
-            .Show();
-    }
-
-    private void ShowTypePicker(Action<TodoActivityType> onPicked)
-    {
-        var handler = _backend.GetActivityTypeHandler();
-        var types = handler.GetActivityTypes().ToList();
-        var items = types.Select(t => t.Name).Append("+ Add new type").ToArray();
-
-        var dialog = new AlertDialog.Builder(this)!
-            .SetTitle("Type")!
-            .SetItems(items, (_, e) =>
-            {
-                if (e.Which < types.Count) onPicked(types[e.Which]);
-                else ShowAddTypeDialog(onPicked);
-            })!
-            .Show()!;
-
-        dialog.ListView!.ItemLongClick += (_, e) =>
-        {
-            if (e.Position >= types.Count) return;
-            var type = types[e.Position];
-
-            if (_backend.GetActivityHandler().GetActivities().Any(a => a.Type.Id == type.Id))
-            {
-                Toast.MakeText(this, "Type is used by existing activities", ToastLength.Short)!.Show();
-                return;
-            }
-
-            new AlertDialog.Builder(this)!
-                .SetTitle($"Delete \"{type.Name}\"?")!
-                .SetPositiveButton("Delete", (_, _) =>
-                {
-                    handler.RemoveActivityType(type.Id);
-                    dialog.Dismiss();
-                    ShowTypePicker(onPicked);
-                })!
-                .SetNegativeButton("Cancel", (_, _) => { })!
-                .Show();
-        };
-    }
-
-    private void ShowAddTypeDialog(Action<TodoActivityType> onPicked)
-    {
-        var input = new EditText(this) { Hint = "Type name" };
-        new AlertDialog.Builder(this)!
-            .SetTitle("New type")!
-            .SetView(input)!
-            .SetPositiveButton("Add", (_, _) =>
-            {
-                if (string.IsNullOrWhiteSpace(input.Text)) return;
-                var handler = _backend.GetActivityTypeHandler();
-                if (handler.AddActivityType(input.Text))
-                    onPicked(handler.GetActivityTypes().First(t => t.Name == input.Text));
-                else
-                    ShowTypePicker(onPicked);
-            })!
-            .SetNegativeButton("Cancel", (_, _) => ShowTypePicker(onPicked))!
-            .Show();
-    }
-
-    private void ShowDeleteDialog(TodoActivity activity)
-    {
-        new AlertDialog.Builder(this)!
-            .SetTitle($"Delete \"{activity.Name}\"?")!
-            .SetPositiveButton("Delete", (_, _) =>
-            {
-                _backend.GetActivityHandler().DeleteActivity(activity.Id);
-                Refresh();
-            })!
-            .SetNegativeButton("Cancel", (_, _) => { })!
-            .Show();
-    }
-
-    private void ShowBackupDialog()
-    {
-        new AlertDialog.Builder(this)!
-            .SetItems(["Export to file", "Import from file"], (_, e) =>
-            {
-                if (e.Which == 0)
-                    StartActivityForResult(new Intent(Intent.ActionOpenDocumentTree)
-                            .AddFlags(ActivityFlags.GrantReadUriPermission | ActivityFlags.GrantWriteUriPermission)!,
-                        ExportCode);
-                else
-                    StartActivityForResult(new Intent(Intent.ActionOpenDocument)
-                        .AddCategory(Intent.CategoryOpenable)!
-                        .SetType("*/*")!, ImportCode);
-            })!
-            .Show();
-    }
-
-    protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)
-    {
-        base.OnActivityResult(requestCode, resultCode, data);
-        if (resultCode != Result.Ok || data?.Data is not { } uri) return;
-
-        bool ok;
-        if (requestCode == ExportCode)
-            ok = ExportToFolder(uri);
-        else
-        {
-            using var stream = ContentResolver!.OpenInputStream(uri)!;
-            ok = _backend.Import(stream);
-            Refresh();
-        }
-        Toast.MakeText(this, ok ? "Done" : "Failed", ToastLength.Short)!.Show();
-    }
-    private bool ExportToFolder(Android.Net.Uri treeUri)
-    {
-        var old = FindChild(treeUri, "activities_old.json");
-        if (old is not null) DocumentsContract.DeleteDocument(ContentResolver!, old);
-
-        var current = FindChild(treeUri, "activities.json");
-        if (current is not null) DocumentsContract.RenameDocument(ContentResolver!, current, "activities_old.json");
-
-        var dir = DocumentsContract.BuildDocumentUriUsingTree(treeUri, DocumentsContract.GetTreeDocumentId(treeUri));
-        var file = DocumentsContract.CreateDocument(ContentResolver!, dir!, "application/json", "activities.json");
-        if (file is null) return false;
-
-        using var stream = ContentResolver!.OpenOutputStream(file, "wt")!;
-        return _backend.Export(stream);
-    }
-
-    private Android.Net.Uri? FindChild(Android.Net.Uri treeUri, string name)
-    {
-        var children = DocumentsContract.BuildChildDocumentsUriUsingTree(
-            treeUri, DocumentsContract.GetTreeDocumentId(treeUri));
-        using var cursor = ContentResolver!.Query(children!,
-            [DocumentsContract.Document.ColumnDocumentId, DocumentsContract.Document.ColumnDisplayName],
-            null, null, null);
-
-        while (cursor is not null && cursor.MoveToNext())
-            if (cursor.GetString(1) == name)
-                return DocumentsContract.BuildDocumentUriUsingTree(treeUri, cursor.GetString(0));
-        return null;
-    }
-
-    private class SwipeCallback(Action<int> onSwipeLeft, Action<int> onSwipeRight)
-        : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.Left | ItemTouchHelper.Right)
-    {
-        public override bool OnMove(RecyclerView recyclerView, RecyclerView.ViewHolder viewHolder,
-            RecyclerView.ViewHolder target) => false;
-
-        public override void OnSwiped(RecyclerView.ViewHolder viewHolder, int direction)
-        {
-            var position = viewHolder.BindingAdapterPosition;
-            if (position < 0) return;
-            if (direction == ItemTouchHelper.Left) onSwipeLeft(position);
-            else onSwipeRight(position);
-        }
-
-        public override void OnChildDraw(Canvas c, RecyclerView recyclerView, RecyclerView.ViewHolder viewHolder,
-            float dX, float dY, int actionState, bool isCurrentlyActive)
-        {
-            var item = viewHolder.ItemView;
-            if (dX != 0)
-            {
-                var background = new ColorDrawable(dX < 0 ? Color.DarkRed : Color.SteelBlue);
-                if (dX < 0) background.SetBounds(item.Right + (int)dX, item.Top, item.Right, item.Bottom);
-                else background.SetBounds(item.Left, item.Top, item.Left + (int)dX, item.Bottom);
-                background.Draw(c);
-            }
-            base.OnChildDraw(c, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive);
-        }
-    }
-    
-    private class ActivityAdapter(Context context, List<TodoActivity> items) : RecyclerView.Adapter
-    {
-        public override int ItemCount => items.Count;
-
-        public override RecyclerView.ViewHolder OnCreateViewHolder(ViewGroup parent, int viewType) =>
-            new Holder(LayoutInflater.From(context)!.Inflate(Resource.Layout.item_activity, parent, false)!);
-
-        public override void OnBindViewHolder(RecyclerView.ViewHolder holder, int position)
-        {
-            var view = holder.ItemView;
-            var a = items[position];
-
-            view.FindViewById<TextView>(Resource.Id.name)!.Text = a.Name;
-            view.FindViewById<TextView>(Resource.Id.type)!.Text = a.Type.Name;
-
-            var deadline = view.FindViewById<TextView>(Resource.Id.deadline)!;
-            deadline.Text = a.Deadline.ToString("g");
-            deadline.SetTextColor(Color.White);
-            ((GradientDrawable)view.Background!.Mutate()!).SetColor(DeadlineColor(a.Deadline, FarColor, NearColor, ColorSpan));
-
-            var description = view.FindViewById<TextView>(Resource.Id.description)!;
-            description.Text = a.Description;
-            description.Visibility = a.Description is null or "no-description" ? ViewStates.Gone : ViewStates.Visible;
-        }
-
-        private class Holder(View view) : RecyclerView.ViewHolder(view) { }
     }
 }

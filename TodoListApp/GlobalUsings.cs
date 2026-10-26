@@ -1,0 +1,10 @@
+﻿global using Android.Content;
+global using Android.Graphics;
+global using Android.Graphics.Drawables;
+global using Android.Provider;
+global using Android.Views;
+global using AndroidX.RecyclerView.Widget;
+global using IBackend = TodoListBackend.ITodoListBackend;
+global using Backend = TodoListBackend.TodoListBackend;
+global using TodoActivity = TodoListBackend.Activity;
+global using TodoActivityType = TodoListBackend.ActivityType;
