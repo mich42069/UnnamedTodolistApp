@@ -8,25 +8,25 @@ public static class BackupFormat
 {
     private const string Marker = "backupVersion";
 
-    public static bool Export(IBackend backend, DeadlineColorSettings colors, Stream output)
+    public static bool Export(IBackend backend, ColorProfile profile, Stream output)
     {
         using var raw = new MemoryStream();
         if (!backend.Export(raw)) return false;
 
         var root = new JsonObject
         {
-            [Marker] = 2,
+            [Marker] = 3,
             ["activities"] = JsonNode.Parse(raw.ToArray()),
-            ["deadlineColors"] = JsonSerializer.SerializeToNode(colors)
+            ["colorProfile"] = JsonSerializer.SerializeToNode(profile)
         };
         using var writer = new Utf8JsonWriter(output);
         root.WriteTo(writer);
         return true;
     }
 
-    public static bool Import(IBackend backend, Stream input, out DeadlineColorSettings? colors)
+    public static bool Import(IBackend backend, Stream input, ColorProfile current, out ColorProfile? profile)
     {
-        colors = null;
+        profile = null;
         using var buffer = new MemoryStream();
         input.CopyTo(buffer);
         var bytes = buffer.ToArray();
@@ -35,15 +35,20 @@ public static class BackupFormat
         {
             if (JsonNode.Parse(bytes) is JsonObject root && root.ContainsKey(Marker))
             {
-                colors = JsonSerializer.Deserialize<DeadlineColorSettings>(root["deadlineColors"]);
-                colors?.Normalize();
+                if (root["colorProfile"] is { } p)
+                    profile = JsonSerializer.Deserialize<ColorProfile>(p);
+                else if (root["deadlineColors"] is { } l
+                         && JsonSerializer.Deserialize<DeadlineColorSettings>(l) is { } legacy)
+                    profile = new ColorProfile
+                        { Selected = ColorProfile.CustomName, Custom = legacy, Saved = current.Saved };
+                profile?.Normalize();
                 bytes = Encoding.UTF8.GetBytes(root["activities"]!.ToJsonString());
             }
         }
-        catch (JsonException) { } // not our wrapper: treat as an old backup
+        catch (JsonException) { }
 
         var ok = backend.Import(new MemoryStream(bytes));
-        if (!ok) colors = null;
+        if (!ok) profile = null;
         return ok;
     }
 }

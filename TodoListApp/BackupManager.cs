@@ -1,7 +1,8 @@
 ﻿namespace TodoListApp;
 
 public class BackupManager(Android.App.Activity host, IBackend backend,
-    Func<DeadlineColorSettings> getColors, Action<DeadlineColorSettings?> onImported)
+    Func<ColorProfile> getProfile, Action<ColorProfile?> onImported)
+
 {
     private const int ExportCode = 1, ImportCode = 2;
 
@@ -33,8 +34,8 @@ public class BackupManager(Android.App.Activity host, IBackend backend,
         else
         {
             using var stream = host.ContentResolver!.OpenInputStream(uri)!;
-            ok = BackupFormat.Import(backend, stream, out var colors);
-            onImported(colors);
+            ok = BackupFormat.Import(backend, stream, getProfile(), out var profile);
+            onImported(profile);
         }
 
         Toast.MakeText(host, ok ? "Done" : "Failed", ToastLength.Short)!.Show();
@@ -42,31 +43,13 @@ public class BackupManager(Android.App.Activity host, IBackend backend,
 
     private bool ExportToFolder(Android.Net.Uri treeUri)
     {
-        var old = FindChild(treeUri, "activities_old.json");
-        if (old is not null) DocumentsContract.DeleteDocument(host.ContentResolver!, old);
-
-        var current = FindChild(treeUri, "activities.json");
-        if (current is not null) DocumentsContract.RenameDocument(host.ContentResolver!, current, "activities_old.json");
-
+        var old = DocumentTree.FindChild(host.ContentResolver!, treeUri, "activities_old.json");
+        var current = DocumentTree.FindChild(host.ContentResolver!, treeUri, "activities.json");
         var dir = DocumentsContract.BuildDocumentUriUsingTree(treeUri, DocumentsContract.GetTreeDocumentId(treeUri));
         var file = DocumentsContract.CreateDocument(host.ContentResolver!, dir!, "application/json", "activities.json");
         if (file is null) return false;
 
         using var stream = host.ContentResolver!.OpenOutputStream(file, "wt")!;
-        return BackupFormat.Export(backend, getColors(), stream);
-    }
-
-    private Android.Net.Uri? FindChild(Android.Net.Uri treeUri, string name)
-    {
-        var children = DocumentsContract.BuildChildDocumentsUriUsingTree(
-            treeUri, DocumentsContract.GetTreeDocumentId(treeUri));
-        using var cursor = host.ContentResolver!.Query(children!,
-            [DocumentsContract.Document.ColumnDocumentId, DocumentsContract.Document.ColumnDisplayName],
-            null, null, null);
-
-        while (cursor is not null && cursor.MoveToNext())
-            if (cursor.GetString(1) == name)
-                return DocumentsContract.BuildDocumentUriUsingTree(treeUri, cursor.GetString(0));
-        return null;
+        return BackupFormat.Export(backend, getProfile(), stream);
     }
 }

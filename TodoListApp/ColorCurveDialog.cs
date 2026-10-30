@@ -1,8 +1,8 @@
 ﻿namespace TodoListApp;
 
-public class ColorCurveDialog(Context context, DeadlineColorSettings current, Action<DeadlineColorSettings> onSaved)
+public class ColorCurveDialog(Context context, ColorProfile profile, DeadlineColorSettings initial, Action onChanged)
 {
-    private readonly DeadlineColorSettings _s = current.Clone();
+    private readonly DeadlineColorSettings _s = initial.Clone();
     private CurvePreview _preview = null!;
     private TextView _farLabel = null!, _daysLabel = null!, _stepsLabel = null!;
     private SeekBar _days = null!, _steps = null!;
@@ -61,10 +61,39 @@ public class ColorCurveDialog(Context context, DeadlineColorSettings current, Ac
         layout.AddView(_steps);
         Refresh();
 
-        new AlertDialog.Builder(context)!
-            .SetTitle("Deadline colors")!
+        // end of Show():
+        var dialog = new AlertDialog.Builder(context)!
+            .SetTitle("Edit colors")!
             .SetView(layout)!
-            .SetPositiveButton("Save", (_, _) => onSaved(_s))!
+            .SetPositiveButton("Set custom", (_, _) =>
+            {
+                profile.Custom = _s;
+                profile.Selected = ColorProfile.CustomName;
+                onChanged();
+            })!
+            .SetNeutralButton("Save as…", (_, _) => { })!
+            .SetNegativeButton("Cancel", (_, _) => { })!
+            .Show()!;
+        // replaces the auto-dismiss, so a bad name doesn't lose your edits
+        dialog.GetButton((int)DialogButtonType.Neutral)!.Click += (_, _) => PromptName(dialog);
+    }
+
+    private void PromptName(AlertDialog editor)
+    {
+        var input = new EditText(context) { Hint = "Preset name" };
+        new AlertDialog.Builder(context)!
+            .SetTitle("Save preset")!
+            .SetView(input)!
+            .SetPositiveButton("Save", (_, _) =>
+            {
+                if (!profile.SaveStyle(input.Text ?? "", _s))
+                {
+                    Toast.MakeText(context, "Name is empty or reserved", ToastLength.Short)!.Show();
+                    return;
+                }
+                onChanged();
+                editor.Dismiss();
+            })!
             .SetNegativeButton("Cancel", (_, _) => { })!
             .Show();
     }

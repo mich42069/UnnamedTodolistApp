@@ -20,22 +20,3 @@ public class DeadlineColorSettings
     public IDeadlineColorizer ToColorizer() => new GradientDeadlineColorizer(
         Colors.Select(c => new Color(c)).ToList(), TimeSpan.FromDays(Days), new LinearCurve(), Steps);
 }
-
-public class SettingsStore(Context context)
-{
-    private ISharedPreferences Prefs => context.GetSharedPreferences("settings", FileCreationMode.Private)!;
-
-    public DeadlineColorSettings Load()
-    {
-        try
-        {
-            var s = JsonSerializer.Deserialize<DeadlineColorSettings>(Prefs.GetString("deadline_colors", "")!);
-            s?.Normalize();
-            return s ?? new();
-        }
-        catch { return new(); }
-    }
-
-    public void Save(DeadlineColorSettings s) =>
-        Prefs.Edit()!.PutString("deadline_colors", JsonSerializer.Serialize(s))!.Apply();
-}
