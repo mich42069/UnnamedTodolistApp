@@ -18,15 +18,21 @@ public class ActivityAdapter(Context context, List<TodoActivity> items, IDeadlin
         view.FindViewById<TextView>(Resource.Id.name)!.Text = a.Name;
         view.FindViewById<TextView>(Resource.Id.type)!.Text = a.Type.Name;
 
+        var done = a.CompletedAt is not null;
         var deadline = view.FindViewById<TextView>(Resource.Id.deadline)!;
-        deadline.Text = a.Deadline.ToString("g");
-        var background = Colorizer.GetColor(a.Deadline);
+        deadline.Text = done ? $"Done {a.CompletedAt:g}" : a.Deadline.ToString("g");
+        var background = done ? Color.ParseColor("#2A2A2A") : Colorizer.GetColor(a.Deadline);
         ((GradientDrawable)view.Background!.Mutate()!).SetColor(background);
+        view.Alpha = done ? 0.6f : 1f;
+
+        var nameView = view.FindViewById<TextView>(Resource.Id.name)!;
+        nameView.PaintFlags = done
+            ? nameView.PaintFlags | PaintFlags.StrikeThruText
+            : nameView.PaintFlags & ~PaintFlags.StrikeThruText;
 
         var text = ContrastColor.TextFor(background);
         foreach (var id in new[] { Resource.Id.name, Resource.Id.type, Resource.Id.deadline, Resource.Id.description })
             view.FindViewById<TextView>(id)!.SetTextColor(text);
-        ((GradientDrawable)view.Background!.Mutate()!).SetColor(Colorizer.GetColor(a.Deadline));
         var description = view.FindViewById<TextView>(Resource.Id.description)!;
         description.Text = a.Description;
         description.Visibility = a.Description is null or "no-description" ? ViewStates.Gone : ViewStates.Visible;

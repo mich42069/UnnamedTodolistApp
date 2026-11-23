@@ -8,6 +8,7 @@ public struct Activity(string name, DateTime deadline, ActivityType type, string
 	public ActivityType Type = type;
 	public string? Description = description;
 	public DateTime Deadline = deadline;
+	public DateTime? CompletedAt;
 
 	public int CompareTo(Activity other)
 	{

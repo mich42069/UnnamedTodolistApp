@@ -8,6 +8,14 @@ public class ActivityHandler : IActivityHandler
 {
 	private readonly ConcurrentDictionary<Guid, Activity> _activities = new();
 
+	public bool SetCompleted(Guid activityId, DateTime? completedAt)
+	{
+		if (!_activities.TryGetValue(activityId, out var activity)) return false;
+		activity.CompletedAt = completedAt;
+		_activities[activityId] = activity;
+		return true;
+	}
+
 	public Activity GetActivity(Guid activityId) =>
 		_activities.TryGetValue(activityId, out var activity)
 			? activity

@@ -6,4 +6,5 @@ public class OptionsMenu(Context context, IReadOnlyList<(string Title, Action Ru
         .SetTitle("Options")!
         .SetItems(entries.Select(e => e.Title).ToArray(), (_, e) => entries[e.Which].Run())!
         .Show();
+	
 }

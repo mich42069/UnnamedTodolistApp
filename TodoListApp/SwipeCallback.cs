@@ -1,7 +1,7 @@
 ﻿namespace TodoListApp;
 
 
-class SwipeCallback(Action<int> onSwipeLeft, Action<int> onSwipeRight)
+class SwipeCallback(Action<int> onSwipeLeft, Action<int> onSwipeRight, Func<bool> inDoneView)
     : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.Left | ItemTouchHelper.Right)
 {
     public override bool OnMove(RecyclerView recyclerView, RecyclerView.ViewHolder viewHolder,
@@ -21,7 +21,9 @@ class SwipeCallback(Action<int> onSwipeLeft, Action<int> onSwipeRight)
         var item = viewHolder.ItemView;
         if (dX != 0)
         {
-            var background = new ColorDrawable(dX < 0 ? Color.DarkRed : Color.SteelBlue);
+            var background = new ColorDrawable(dX < 0
+                ? (inDoneView() ? Color.DarkRed : Color.ForestGreen)
+                : (inDoneView() ? Color.ForestGreen : Color.SteelBlue));
             if (dX < 0) background.SetBounds(item.Right + (int)dX, item.Top, item.Right, item.Bottom);
             else background.SetBounds(item.Left, item.Top, item.Left + (int)dX, item.Bottom);
             background.Draw(c);

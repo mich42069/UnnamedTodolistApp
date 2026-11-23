@@ -24,7 +24,7 @@ public static class ReminderPlanner
 	{
 		var result = new List<Reminder>();
 		foreach (var list in handler.GetAll().Where(l => l.RemindersEnabled()))
-			foreach (var a in list.GetActivityHandler().GetActivities())
+			foreach (var a in list.GetActivityHandler().GetActivities().Where(a => a.CompletedAt is null))
 			{
 				var due = a.Deadline.TimeOfDay == TimeSpan.Zero ? a.Deadline.Date + settings.DateOnlyTime : a.Deadline;
 				result.AddRange(settings.Offsets.Select(o => new Reminder(list.Name, a.Id, a.Name, a.Deadline, due - o)));

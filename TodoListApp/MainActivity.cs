@@ -16,6 +16,7 @@ public class MainActivity : Activity
 	private BackupManager _backup = null!;
 	private SettingsStore _store = null!;
 	private ITodoListHandler _handler = null!;
+	private bool _showDone;
 
 	protected override void OnCreate(Bundle? savedInstanceState)
 	{
@@ -38,14 +39,7 @@ public class MainActivity : Activity
 		_autoBackup = new AutoBackup(this, _handler, _store, OnImported);
 
 
-		var options = new OptionsMenu(this,
-		[
-			("Reminder times", () => new ReminderDialog(this, _store, _handler).Show()),
-			("Start on list", () => _listDialogs.ShowStartOn()),
-
-			("Auto-backup folder", () => _autoBackup.PickFolder()),
-			("Backup", () => _backup.ShowDialog())
-		]);
+		var options = BuildOptions();
 
 		var list = FindViewById<RecyclerView>(Resource.Id.activityList)!;
 		list.SetLayoutManager(new LinearLayoutManager(this));
@@ -54,26 +48,61 @@ public class MainActivity : Activity
 			position =>
 			{
 				var a = _shown[position];
-				Refresh();
-				_dialogs.ShowDelete(a);
+				if (_showDone)
+				{
+					Refresh();
+					_dialogs.ShowDelete(a);
+				}
+				else SetDone(a, true);
 			},
 			position =>
 			{
 				var a = _shown[position];
-				Refresh();
-				_dialogs.ShowActivity(a);
-			}
+				if (_showDone) SetDone(a, false);
+				else
+				{
+					Refresh();
+					_dialogs.ShowActivity(a);
+				}
+			},
+			() => _showDone
 		)).AttachToRecyclerView(list);
 
 		FindViewById<Button>(Resource.Id.addButton)!.Click += (_, _) => _dialogs.ShowActivity();
-		FindViewById<Button>(Resource.Id.optionsButton)!.Click += (_, _) => options.Show();
+		FindViewById<Button>(Resource.Id.optionsButton)!.Click += (_, _) => BuildOptions().Show();
 		Refresh();
 		if (Build.VERSION.SdkInt >= (BuildVersionCodes)33
 			&& CheckSelfPermission("android.permission.POST_NOTIFICATIONS") != Android.Content.PM.Permission.Granted)
 			RequestPermissions(["android.permission.POST_NOTIFICATIONS"], 10);
 	}
 
-	private void UpdateListButton() => _listButton.Text = $"{_backend.Name} ▾";
+	private OptionsMenu BuildOptions() => new(this,
+	[
+		(_showDone ? "Show open activities" : "Show completed", ToggleDone),
+		("Start on list", () => _listDialogs.ShowStartOn()),
+		("Reminder times", () => new ReminderDialog(this, _store, _handler).Show()),
+		("Auto-backup folder", () => _autoBackup.PickFolder()),
+		("Backup", () => _backup.ShowDialog())
+	]);
+
+	private void SetDone(TodoActivity a, bool done)
+	{
+		_backend.GetActivityHandler().SetCompleted(a.Id, done ? DateTime.Now : null);
+		Toast.MakeText(this, done ? "Moved to completed" : "Restored", ToastLength.Short)!.Show();
+		Refresh();
+	}
+
+	private void ToggleDone()
+	{
+		_showDone = !_showDone;
+		FindViewById<Button>(Resource.Id.addButton)!.Visibility = _showDone ? ViewStates.Gone : ViewStates.Visible;
+		UpdateListButton();
+		Refresh();
+	}
+
+	private void UpdateListButton() =>
+		_listButton.Text = $"{_backend.Name} ▾{(_showDone ? " · completed" : "")}";
+
 
 	private void UseList()
 	{
@@ -113,8 +142,11 @@ public class MainActivity : Activity
 
 	private void Refresh()
 	{
+		var activities = _backend.GetActivityHandler().GetActivities();
 		_shown.Clear();
-		_shown.AddRange(_backend.GetActivityHandler().GetActivities().OrderBy(a => a.Deadline));
+		_shown.AddRange(_showDone
+			? activities.Where(a => a.CompletedAt is not null).OrderByDescending(a => a.CompletedAt)
+			: activities.Where(a => a.CompletedAt is null).OrderBy(a => a.Deadline));
 		_adapter.NotifyDataSetChanged();
 	}
 }

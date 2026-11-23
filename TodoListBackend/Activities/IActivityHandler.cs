@@ -8,4 +8,5 @@ public interface IActivityHandler
 	public bool                  CreateActivity(Activity activity);
 	public IEnumerable<Activity> GetActivities();
 	public IEnumerable<Guid>     GetActivityIds();
+	public bool                  SetCompleted(Guid activityId, DateTime? completedAt);
 }
