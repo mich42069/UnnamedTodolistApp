@@ -1,3 +1,5 @@
+using Android.OS;
+
 namespace TodoListApp;
 
 [Activity(Label = "@string/app_name", MainLauncher = true, Theme = "@android:style/Theme.DeviceDefault.NoActionBar")]
@@ -26,7 +28,7 @@ public class MainActivity : Activity
 		_handler.Load();
 		_handler.EnsureColorProfiles(_store.LoadProfile());
 		_handler.CurrentChanged += _ => OnListChanged();
-		
+
 		_listDialogs = new ListDialogs(this, _handler, OnListChanged);
 		_listButton.Click += (_, _) => _listDialogs.ShowSwitcher();
 
@@ -38,8 +40,9 @@ public class MainActivity : Activity
 
 		var options = new OptionsMenu(this,
 		[
+			("Reminder times", () => new ReminderDialog(this, _store, _handler).Show()),
 			("Start on list", () => _listDialogs.ShowStartOn()),
-			
+
 			("Auto-backup folder", () => _autoBackup.PickFolder()),
 			("Backup", () => _backup.ShowDialog())
 		]);
@@ -65,8 +68,13 @@ public class MainActivity : Activity
 		FindViewById<Button>(Resource.Id.addButton)!.Click += (_, _) => _dialogs.ShowActivity();
 		FindViewById<Button>(Resource.Id.optionsButton)!.Click += (_, _) => options.Show();
 		Refresh();
+		if (Build.VERSION.SdkInt >= (BuildVersionCodes)33
+			&& CheckSelfPermission("android.permission.POST_NOTIFICATIONS") != Android.Content.PM.Permission.Granted)
+			RequestPermissions(["android.permission.POST_NOTIFICATIONS"], 10);
 	}
+
 	private void UpdateListButton() => _listButton.Text = $"{_backend.Name} ▾";
+
 	private void UseList()
 	{
 		_backend = _handler.Current();
@@ -92,6 +100,7 @@ public class MainActivity : Activity
 	{
 		base.OnPause();
 		_handler.Save();
+		ReminderService.Process(this, _handler);
 		_autoBackup.Write();
 	}
 
