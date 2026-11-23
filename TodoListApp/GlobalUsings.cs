@@ -5,6 +5,7 @@ global using Android.Provider;
 global using Android.Views;
 global using AndroidX.RecyclerView.Widget;
 global using IBackend = TodoListBackend.ITodoList;
-global using Backend = TodoListBackend.TodoList;
 global using TodoActivity = TodoListBackend.Activity;
 global using TodoActivityType = TodoListBackend.ActivityType;
+global using ITodoListHandler = TodoListBackend.ITodoListHandler;
+global using TodoListHandler = TodoListBackend.TodoListHandler;
