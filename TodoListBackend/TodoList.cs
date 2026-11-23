@@ -3,14 +3,14 @@ using System.Text.Json;
 
 namespace TodoListBackend;
 
-public partial class TodoListBackend : ITodoListBackend
+public partial class TodoList : ITodoList
 {
     
     private readonly string _filePath;
     private static readonly JsonSerializerOptions Options = new() { IncludeFields = true, WriteIndented = true };
     private ActivityHandler _activityHandler = new();
     private ActivityTypeHandler _activityTypeHandler = new ();
-    public TodoListBackend(string filePath) => _filePath = filePath;
+    public TodoList(string filePath) => _filePath = filePath;
 
     public IActivityTypeHandler GetActivityTypeHandler()
     {

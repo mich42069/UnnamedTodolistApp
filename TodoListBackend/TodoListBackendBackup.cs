@@ -2,7 +2,7 @@
 
 namespace TodoListBackend;
 
-public partial class TodoListBackend
+public partial class TodoList
 {
     private sealed class BackupData
     {

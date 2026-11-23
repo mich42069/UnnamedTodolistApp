@@ -1,6 +1,6 @@
 ﻿namespace TodoListBackend;
 
-public interface ITodoListBackend
+public interface ITodoList
 {
     public bool Save();
     public bool Load();
